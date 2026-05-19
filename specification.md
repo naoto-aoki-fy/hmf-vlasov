@@ -147,7 +147,6 @@ The reconstruction must satisfy:
 \frac{1}{\Delta x}
 \int_{I_k} R[g](x),dx
 =
-
 \bar g_k.
 ```
 
@@ -322,7 +321,6 @@ M_y^{*}
 ```math
 F_i^{*}
 =
-
 -M_x^{*}\sin\theta_i
 +
 M_y^{*}\cos\theta_i.
@@ -333,7 +331,6 @@ M_y^{*}\cos\theta_i.
 ```math
 \bar f^{**}
 =
-
 B_{\Delta t}(F^*)\bar f^{*}.
 ```
 
@@ -342,7 +339,6 @@ B_{\Delta t}(F^*)\bar f^{*}.
 ```math
 \bar f^{n+1}
 =
-
 A_{\Delta t/2}\bar f^{**}.
 ```
 
@@ -394,7 +390,6 @@ f_{\min}(t)=\min_{i,j}\bar f_{i,j}.
 ```math
 B_p(t)
 =
-
 \sum_{i,;j\in\mathcal B}
 \bar f_{i,j}\Delta\theta\Delta p,
 ```
@@ -444,79 +439,6 @@ Also perform convergence checks using at least two refinements:
 ```
 
 Compare (M(t)), (U(t)), and (L_2(t)).
-
----
-
-## 11. Suggested Baseline Parameters
-
-For smooth Gaussian-type initial data:
-
-```math
-N_\theta=N_p=512,
-\qquad
-\Delta t=0.05,
-\qquad
-p_{\max}\ge 5\sigma_p.
-```
-
-For waterbag-type initial data:
-
-```math
-N_\theta=N_p\ge 1024,
-\qquad
-\Delta t\le 0.05,
-```
-
-with conservative WENO or monotonicity-preserving reconstruction recommended near sharp edges.
-
----
-
-## 12. Initial Conditions
-
-### Homogeneous Gaussian with perturbation
-
-```math
-f_0(\theta,p)
-=
-
-\frac{1}{2\pi}
-\sqrt{\frac{\beta}{2\pi}}
-\exp\left(-\frac{\beta p^2}{2}\right)
-\left[1+\epsilon\cos\theta\right].
-```
-
-### Homogeneous waterbag with perturbation
-
-```math
-f_0(\theta,p)
-=
-
-\frac{1}{2\pi}
-\frac{1}{2p_0}
-\mathbf{1}_{|p|\le p_0}
-\left[1+\epsilon\cos\theta\right].
-```
-
-Use small perturbations such as
-
-```math
-\epsilon=10^{-3}
-```
-
-for linear-regime validation.
-
----
-
-## 13. Validation Tests
-
-A suitable validation sequence is:
-
-1. Verify exact mass conservation.
-2. Verify second-order convergence in time for smooth data.
-3. Verify spatial convergence under grid refinement.
-4. Reproduce the Vlasov instability threshold for homogeneous waterbag or Gaussian states.
-5. Compare the early-time growth of magnetization with the theoretical linear growth rate.
-6. Confirm that the results are insensitive to (p_{\max}).
 
 ---
 
