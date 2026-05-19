@@ -1,1 +1,53 @@
-# HMF Vlasov
+# hmf-vlasov
+
+Python simulator for the HMF Vlasov equation, based on the method in `specification.md`:
+
+- Second-order Strang splitting (`A(dt/2) -> B(dt) -> A(dt/2)`).
+- Conservative semi-Lagrangian finite-volume advection in both `theta` and `p` directions.
+- Periodic angular boundary and zero-extension momentum boundary.
+- Runtime diagnostics (mass, energy, magnetization, L2, minimum value, boundary mass).
+
+## Requirements
+
+- Python 3.10+
+- NumPy
+
+## Binary state format
+
+State dumps are little-endian binary files with this layout:
+
+1. `magic` (8 bytes): `HMFVLSV1`
+2. `N_theta` (`uint32`)
+3. `N_p` (`uint32`)
+4. `p_max` (`float64`)
+5. `t` (`float64`)
+6. `f` payload (`N_theta * N_p` values of `float64` in C order, shape `(N_theta, N_p)`)
+
+## Run simulator
+
+```bash
+python simulator.py \
+  --input initial.bin \
+  --output final.bin \
+  --dt 0.05 \
+  --steps 100 \
+  --diag-every 10
+```
+
+## Quick utility snippet to create an initial dump
+
+```python
+import numpy as np
+from pathlib import Path
+from simulator import Grid, dump_state
+
+grid = Grid(n_theta=64, n_p=64, p_max=4.0)
+theta = grid.theta_centers[:, None]
+p = grid.p_centers[None, :]
+f0 = np.exp(-p**2 / 2.0) * (1.0 + 0.1 * np.cos(theta))
+# normalize mass to 1
+f0 /= (f0.sum() * grid.dtheta * grid.dp)
+
+dump_state(Path("initial.bin"), grid, t=0.0, f=f0)
+```
+
