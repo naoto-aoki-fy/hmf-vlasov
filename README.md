@@ -12,7 +12,8 @@ python simulator.py \
   --np 256 \
   --pmax 8.0 \
   --dt 0.05 \
-  --tfinal 10.0
+  --tfinal 10.0 \
+  --video evolution.mp4
 ```
 
 - `init.npy` must contain a 2D NumPy array of shape `(ntheta, np)` with arbitrary initial data sampled as cell averages.
@@ -20,3 +21,8 @@ python simulator.py \
   - `f_final`: final distribution
   - `diagnostics_initial` / `diagnostics_final`: JSON diagnostics
   - `nsteps`, `dt`, `tfinal`
+- Optional video output:
+  - `--video evolution.mp4`: write an MP4 of the evolving distribution.
+  - Horizontal axis is `theta` and vertical axis is `p`.
+  - `--video-step N`: record one frame every `N` steps (default: `1`).
+  - `--video-fps FPS`: output framerate (default: `20`).

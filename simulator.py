@@ -188,6 +188,9 @@ def main() -> None:
     p.add_argument("--pmax", type=float, required=True)
     p.add_argument("--dt", type=float, required=True)
     p.add_argument("--tfinal", type=float, required=True)
+    p.add_argument("--video", type=Path, help="Optional output .mp4 showing the processed distribution over time")
+    p.add_argument("--video-fps", type=int, default=20, help="Frames-per-second for --video output")
+    p.add_argument("--video-step", type=int, default=1, help="Write one frame every N time steps")
     args = p.parse_args()
 
     grid = Grid(args.ntheta, args.np_, args.pmax)
@@ -198,10 +201,50 @@ def main() -> None:
     nsteps = int(np.round(args.tfinal / args.dt))
     if not np.isclose(nsteps * args.dt, args.tfinal):
         raise ValueError("tfinal must be an integer multiple of dt")
+    if args.video_step < 1:
+        raise ValueError("--video-step must be >= 1")
+    if args.video_fps < 1:
+        raise ValueError("--video-fps must be >= 1")
 
     diag0 = diagnostics(f, grid)
-    for _ in range(nsteps):
+
+    video_context = None
+    if args.video is not None:
+        import matplotlib.pyplot as plt
+        from matplotlib.animation import FFMpegWriter
+
+        args.video.parent.mkdir(parents=True, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
+        image = ax.imshow(
+            f.T,
+            origin="lower",
+            aspect="auto",
+            extent=(0.0, 2.0 * np.pi, -grid.pmax, grid.pmax),
+            cmap="viridis",
+        )
+        ax.set_xlabel("theta")
+        ax.set_ylabel("p")
+        ax.set_title("t = 0.0")
+        fig.colorbar(image, ax=ax, label="f(theta, p)")
+
+        writer = FFMpegWriter(fps=args.video_fps)
+        video_context = (fig, ax, image, writer)
+        writer.setup(fig, str(args.video), dpi=120)
+        writer.grab_frame()
+
+    for step in range(1, nsteps + 1):
         f = strang_step(f, grid, args.dt)
+        if video_context is not None and step % args.video_step == 0:
+            fig, ax, image, writer = video_context
+            image.set_data(f.T)
+            ax.set_title(f"t = {step * args.dt:.6g}")
+            writer.grab_frame()
+
+    if video_context is not None:
+        fig, _, _, writer = video_context
+        writer.finish()
+        plt.close(fig)
+
     diagf = diagnostics(f, grid)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
