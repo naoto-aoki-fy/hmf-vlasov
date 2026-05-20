@@ -57,3 +57,24 @@ dump_state(Path("initial.bin"), grid, t=0.0, f=f0)
 
 
 If `--video` is set, the simulator records the evolving distribution and writes an animation. The horizontal axis is `theta` and the vertical axis is `p`. Use `.mp4` (ffmpeg writer) or `.gif` (pillow writer) as the output extension.
+
+
+## Generate WBIC initial condition
+
+Use `generate_wbic.py` to create a waterbag initial condition (uniform inside a rectangle in `(theta, p)`) and write it in the simulator binary format:
+
+```bash
+python generate_wbic.py \
+  --output initial.bin \
+  --n-theta 128 \
+  --n-p 128 \
+  --p-max 4.0 \
+  --delta-p 1.0 \
+  --delta-theta 0.5
+```
+
+WBIC support ranges:
+- `p in [-delta_p/2, +delta_p/2]`
+- `theta in [-delta_theta/2, +delta_theta/2]` (with periodic wrap to `[0, 2pi)`)
+
+The generated distribution is normalized to unit total mass.
