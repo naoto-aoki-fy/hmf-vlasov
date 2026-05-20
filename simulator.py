@@ -82,19 +82,64 @@ def primitive_from_piecewise_linear(values: np.ndarray, dx: float, periodic: boo
 
 
 def advect_1d_conservative(values: np.ndarray, shift: float, dx: float, periodic: bool) -> np.ndarray:
-    n = values.size
-    _, prim = primitive_from_piecewise_linear(values, dx=dx, periodic=periodic)
-    interfaces = np.arange(n + 1) * dx
-    left = interfaces[:-1] - shift
-    right = interfaces[1:] - shift
-    return (prim(right) - prim(left)) / dx
+    return advect_1d_conservative_batch(values, np.array(shift), dx=dx, periodic=periodic)
+
+
+def advect_1d_conservative_batch(
+    values: np.ndarray, shifts: np.ndarray, dx: float, periodic: bool, axis: int = 0
+) -> np.ndarray:
+    moved = np.moveaxis(np.asarray(values, dtype=float), axis, 0)
+    n = moved.shape[0]
+    batch_shape = moved.shape[1:]
+
+    shifts_arr = np.asarray(shifts, dtype=float)
+    if shifts_arr.shape != batch_shape:
+        raise ValueError(f"shifts shape {shifts_arr.shape} must match batch shape {batch_shape}")
+
+    if periodic:
+        left = np.roll(moved, 1, axis=0)
+        right = np.roll(moved, -1, axis=0)
+        slopes = minmod(moved - left, right - moved)
+    else:
+        slopes = np.zeros_like(moved)
+        slopes[1:-1, ...] = minmod(moved[1:-1, ...] - moved[:-2, ...], moved[2:, ...] - moved[1:-1, ...])
+
+    pref = np.concatenate((np.zeros((1,) + batch_shape), np.cumsum(moved * dx, axis=0)), axis=0)
+
+    interfaces = np.arange(n + 1, dtype=float) * dx
+    left_x = interfaces[:-1].reshape((n,) + (1,) * len(batch_shape)) - shifts_arr
+    right_x = interfaces[1:].reshape((n,) + (1,) * len(batch_shape)) - shifts_arr
+
+    def prim_eval(x: np.ndarray) -> np.ndarray:
+        xx = x
+        if periodic:
+            xx = np.mod(xx, n * dx)
+
+        out = np.zeros_like(xx)
+        mask_low = xx <= 0.0
+        mask_high = xx >= n * dx
+        mask_mid = ~(mask_low | mask_high)
+        if np.any(mask_high):
+            out[mask_high] = np.broadcast_to(pref[-1], xx.shape)[mask_high]
+
+        if np.any(mask_mid):
+            k = np.floor(xx / dx).astype(int)
+            k = np.clip(k, 0, n - 1)
+            x0 = k * dx
+            xi = xx - (x0 + 0.5 * dx)
+            pref_k = np.take_along_axis(pref[:-1], k, axis=0)
+            val_k = np.take_along_axis(moved, k, axis=0)
+            slope_k = np.take_along_axis(slopes, k, axis=0)
+            mid_val = pref_k + val_k * (xx - x0) + 0.5 * slope_k / dx * (xi**2 - (0.5 * dx) ** 2)
+            out = np.where(mask_mid, mid_val, out)
+        return out
+
+    advected = (prim_eval(right_x) - prim_eval(left_x)) / dx
+    return np.moveaxis(advected, 0, axis)
 
 
 def theta_step(f: np.ndarray, grid: Grid, tau: float) -> np.ndarray:
-    out = np.empty_like(f)
-    for j, pj in enumerate(grid.p_centers):
-        out[:, j] = advect_1d_conservative(f[:, j], shift=pj * tau, dx=grid.dtheta, periodic=True)
-    return out
+    return advect_1d_conservative_batch(f, shifts=grid.p_centers * tau, dx=grid.dtheta, periodic=True, axis=0)
 
 
 def magnetization(f: np.ndarray, grid: Grid) -> tuple[float, float]:
@@ -106,10 +151,7 @@ def magnetization(f: np.ndarray, grid: Grid) -> tuple[float, float]:
 
 
 def p_step(f: np.ndarray, force_theta: np.ndarray, grid: Grid, tau: float) -> np.ndarray:
-    out = np.empty_like(f)
-    for i, fi in enumerate(force_theta):
-        out[i, :] = advect_1d_conservative(f[i, :], shift=fi * tau, dx=grid.dp, periodic=False)
-    return out
+    return advect_1d_conservative_batch(f, shifts=force_theta * tau, dx=grid.dp, periodic=False, axis=1)
 
 
 def strang_step(f: np.ndarray, grid: Grid, dt: float) -> np.ndarray:
