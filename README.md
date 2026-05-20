@@ -2,6 +2,25 @@
 
 `simulator.py` provides a Python implementation of a Strang-split conservative semi-Lagrangian HMF Vlasov solver, modeled after the workflow used by `vmf90`.
 
+## Generate WBIC initial condition
+
+Use `generate_wbic_init.py` to create a water-bag initial condition file for `simulator.py`.
+
+```bash
+python generate_wbic_init.py \
+  --output init.npy \
+  --ntheta 256 \
+  --np 256 \
+  --pmax 8.0 \
+  --delta-p 1.0 \
+  --delta-theta 1.0
+```
+
+The generated distribution is uniform inside:
+
+- `p in [-delta-p/2, +delta-p/2]`
+- `theta in [-delta-theta/2, +delta-theta/2]` (wrapped onto `[0, 2pi)`)
+
 ## Run
 
 ```bash
