@@ -109,19 +109,42 @@ def semi_lagrangian_1d(values: np.ndarray, dx: float, displacement: float, perio
     return (g[1:] - g[:-1]) / dx
 
 
+
+
+def semi_lagrangian_1d_batch(values: np.ndarray, dx: float, displacements: np.ndarray, periodic: bool) -> np.ndarray:
+    """Vectorized conservative semi-Lagrangian advection for many 1D profiles."""
+    n, m = values.shape
+    slope = minmod(values - np.roll(values, 1, axis=0), np.roll(values, -1, axis=0) - values)
+    cols = np.arange(m, dtype=np.int64)[None, :]
+    edges = np.arange(n + 1, dtype=np.float64)[:, None] * dx - displacements[None, :]
+
+    xi = edges / dx
+    kf = np.floor(xi).astype(np.int64)
+    frac = xi - kf
+
+    prefix = np.vstack((np.zeros((1, m), dtype=values.dtype), np.cumsum(values * dx, axis=0)))
+
+    if periodic:
+        k = np.mod(kf, n)
+        turns = np.floor_divide(kf, n)
+        base = turns * np.sum(values, axis=0, keepdims=True) * dx
+        y = values[k, cols] + 0.5 * slope[k, cols] * (2.0 * frac - 1.0)
+        g = base + prefix[k, cols] + frac * y * dx
+    else:
+        x_clamped = np.clip(edges, 0.0, n * dx)
+        kx = np.floor(x_clamped / dx).astype(np.int64)
+        kx = np.clip(kx, 0, n - 1)
+        fracx = (x_clamped / dx) - kx
+        yx = values[kx, cols] + 0.5 * slope[kx, cols] * (2.0 * fracx - 1.0)
+        g = prefix[kx, cols] + fracx * yx * dx
+
+    return np.diff(g, axis=0) / dx
 def advect_theta(f: np.ndarray, grid: Grid, tau: float) -> np.ndarray:
-    out = np.empty_like(f)
-    p = grid.p_centers
-    for j in range(grid.n_p):
-        out[:, j] = semi_lagrangian_1d(f[:, j], grid.dtheta, p[j] * tau, periodic=True)
-    return out
+    return semi_lagrangian_1d_batch(f, grid.dtheta, grid.p_centers * tau, periodic=True)
 
 
 def advect_p(f: np.ndarray, grid: Grid, tau: float, force: np.ndarray) -> np.ndarray:
-    out = np.empty_like(f)
-    for i in range(grid.n_theta):
-        out[i, :] = semi_lagrangian_1d(f[i, :], grid.dp, force[i] * tau, periodic=False)
-    return out
+    return semi_lagrangian_1d_batch(f.T, grid.dp, force * tau, periodic=False).T
 
 
 def magnetization(f: np.ndarray, grid: Grid) -> Tuple[float, float]:
