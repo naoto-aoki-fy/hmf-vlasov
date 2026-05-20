@@ -31,7 +31,10 @@ python simulator.py \
   --output final.bin \
   --dt 0.05 \
   --steps 100 \
-  --diag-every 10
+  --diag-every 10 \
+  --video distribution.mp4 \
+  --video-every 2 \
+  --video-fps 24
 ```
 
 ## Quick utility snippet to create an initial dump
@@ -51,3 +54,6 @@ f0 /= (f0.sum() * grid.dtheta * grid.dp)
 dump_state(Path("initial.bin"), grid, t=0.0, f=f0)
 ```
 
+
+
+If `--video` is set, the simulator records the evolving distribution and writes an animation. The horizontal axis is `theta` and the vertical axis is `p`. Use `.mp4` (ffmpeg writer) or `.gif` (pillow writer) as the output extension.

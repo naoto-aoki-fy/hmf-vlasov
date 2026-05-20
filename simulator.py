@@ -15,7 +15,7 @@ import argparse
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -187,19 +187,65 @@ def step_strang(f: np.ndarray, grid: Grid, dt: float) -> np.ndarray:
     return advect_theta(full, grid, dt * 0.5)
 
 
-def run_simulation(grid: Grid, f0: np.ndarray, t0: float, dt: float, steps: int, diag_every: int) -> Tuple[float, np.ndarray]:
+
+
+def render_video(path: Path, grid: Grid, frames: List[np.ndarray], times: List[float], fps: int) -> None:
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.animation import FFMpegWriter, PillowWriter
+    except ImportError as exc:
+        raise RuntimeError("Video output requires matplotlib") from exc
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    extent = (0.0, 2.0 * np.pi, -grid.p_max, grid.p_max)
+    img = ax.imshow(
+        frames[0].T,
+        origin="lower",
+        aspect="auto",
+        extent=extent,
+        interpolation="nearest",
+    )
+    ax.set_xlabel("theta")
+    ax.set_ylabel("p")
+    title = ax.set_title(f"t={times[0]:.6f}")
+    fig.colorbar(img, ax=ax, label="f(theta, p)")
+
+    suffix = path.suffix.lower()
+    if suffix == ".gif":
+        writer = PillowWriter(fps=fps)
+    else:
+        writer = FFMpegWriter(fps=fps)
+
+    with writer.saving(fig, str(path), dpi=120):
+        for frame, t in zip(frames, times):
+            img.set_data(frame.T)
+            title.set_text(f"t={t:.6f}")
+            writer.grab_frame()
+
+    plt.close(fig)
+
+
+def run_simulation(grid: Grid, f0: np.ndarray, t0: float, dt: float, steps: int, diag_every: int, video_every: int = 0) -> Tuple[float, np.ndarray, List[np.ndarray], List[float]]:
     t = t0
     f = np.array(f0, copy=True)
+    frames: List[np.ndarray] = []
+    frame_times: List[float] = []
+    if video_every > 0:
+        frames.append(np.array(f, copy=True))
+        frame_times.append(t)
     for n in range(1, steps + 1):
         f = step_strang(f, grid, dt)
         t += dt
+        if video_every > 0 and (n % video_every == 0 or n == steps):
+            frames.append(np.array(f, copy=True))
+            frame_times.append(t)
         if diag_every > 0 and (n % diag_every == 0 or n == steps):
             d = diagnostics(f, grid)
             print(
                 f"step={n:6d} t={t:.6f} mass={d['mass']:.12e} energy={d['energy']:.12e} "
                 f"M={d['M']:.12e} L2={d['L2']:.12e} fmin={d['fmin']:.12e} bmass={d['boundary_mass']:.12e}"
             )
-    return t, f
+    return t, f, frames, frame_times
 
 
 def parse_args() -> argparse.Namespace:
@@ -209,14 +255,20 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dt", type=float, required=True, help="Time step")
     p.add_argument("--steps", type=int, required=True, help="Number of time steps")
     p.add_argument("--diag-every", type=int, default=10, help="Print diagnostics every N steps")
+    p.add_argument("--video", type=Path, default=None, help="Optional output animation path (.mp4 or .gif)")
+    p.add_argument("--video-every", type=int, default=1, help="Store one video frame every N steps")
+    p.add_argument("--video-fps", type=int, default=20, help="Video frame rate")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     grid, t0, f0 = load_state(args.input)
-    tf, ff = run_simulation(grid, f0, t0, args.dt, args.steps, args.diag_every)
+    video_every = args.video_every if args.video is not None else 0
+    tf, ff, frames, frame_times = run_simulation(grid, f0, t0, args.dt, args.steps, args.diag_every, video_every=video_every)
     dump_state(args.output, grid, tf, ff)
+    if args.video is not None:
+        render_video(args.video, grid, frames, frame_times, args.video_fps)
 
 
 if __name__ == "__main__":
