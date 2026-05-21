@@ -5,13 +5,13 @@ Python implementation of the **HMF Vlasov simulation** from [`pdebuyl/vmf90`](ht
 ## Run
 
 ```bash
-python hmf_vlasov.py HMF_in --output hmf.h5
+python hmf_vlasov.py HMF_in.toml --output hmf.h5
 ```
 
 
 ## Configuration
 
-`HMF_in` is now parsed as **TOML**. Use quoted strings and standard TOML numbers/booleans.
+`HMF_in.toml` is parsed as **TOML**. Use quoted strings and standard TOML numbers/booleans.
 
 Time-stepping scheme is selected with:
 
@@ -27,7 +27,7 @@ This implementation reproduces the vmf90 HMF splitting loop and writes an H5MD-l
 - `/observables/*/{step,time,value}` for mass/energy/etc.
 - `/fields/*/{step,time,value}` for `f`, `rho`, `phi`
 
-The included `HMF_in` comes from vmf90's `scripts/HMF_in.resonances`.
+The included `HMF_in.toml` comes from vmf90's `scripts/HMF_in.resonances`.
 
 ## Create an animation
 

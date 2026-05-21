@@ -251,7 +251,7 @@ def run(conf, out_file="hmf.h5"):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("config", nargs="?", default="HMF_in")
+    ap.add_argument("config", nargs="?", default="HMF_in.toml")
     ap.add_argument("--output", default="hmf.h5")
     args = ap.parse_args()
     run(parse_config(args.config), args.output)
