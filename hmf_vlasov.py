@@ -55,31 +55,45 @@ def compute_force(g: Grid, mx: float, my: float):
     g.force = np.cos(g.x) * my - np.sin(g.x) * mx
 
 
+def eval_cubic_components_axis0(cs: CubicSpline, xq: np.ndarray, fill_value=None) -> np.ndarray:
+    xp = cs.x
+    nseg = xp.size - 1
+
+    if fill_value is None:
+        valid = np.ones_like(xq, dtype=bool)
+        xwork = xq
+    else:
+        valid = (xq >= xp[0]) & (xq <= xp[-1])
+        xwork = np.clip(xq, xp[0], xp[-1])
+
+    seg = np.searchsorted(xp, xwork, side="right") - 1
+    seg = np.clip(seg, 0, nseg - 1)
+    t = xwork - xp[seg]
+    batch = np.arange(xq.shape[1])[None, :]
+
+    c = cs.c
+    out = ((c[0, seg, batch] * t + c[1, seg, batch]) * t + c[2, seg, batch]) * t + c[3, seg, batch]
+
+    if fill_value is not None:
+        out = np.where(valid, out, fill_value)
+    return out
+
+
 def advance_x(g: Grid, h: float):
     x_back = g.x[:, None] - g.DT * h * g.v[None, :]
     period = g.xmax - g.xmin
     x_eval = ((x_back - g.xmin) % period) + g.xmin
 
     x_periodic = np.concatenate((g.x, [g.xmax]))
-
-    fnew = np.empty_like(g.f)
-    for j in range(g.Nv):
-        y_periodic = np.concatenate((g.f[:, j], [g.f[0, j]]))
-        spline = CubicSpline(x_periodic, y_periodic, bc_type="periodic", extrapolate="periodic")
-        fnew[:, j] = spline(x_eval[:, j])
-    g.f = fnew
+    y_periodic = np.vstack((g.f, g.f[:1, :]))
+    spline = CubicSpline(x_periodic, y_periodic, axis=0, bc_type="periodic", extrapolate="periodic")
+    g.f = eval_cubic_components_axis0(spline, x_eval)
 
 
 def advance_v(g: Grid, h: float):
     v_back = g.v[None, :] - g.DT * h * g.force[:, None]
-
-    fnew = np.zeros_like(g.f)
-    for i in range(g.Nx):
-        spline = CubicSpline(g.v, g.f[i, :], bc_type="natural", extrapolate=False)
-        vals = spline(v_back[i, :])
-        vals[np.isnan(vals)] = 0.0
-        fnew[i, :] = vals
-    g.f = fnew
+    spline = CubicSpline(g.v, g.f.T, axis=0, bc_type="natural", extrapolate=False)
+    g.f = eval_cubic_components_axis0(spline, v_back.T, fill_value=0.0).T
 
 
 def eval_periodic_primitive_from_cell_averages(cell_avg: np.ndarray, dx: float, x: np.ndarray) -> np.ndarray:
@@ -97,6 +111,24 @@ def eval_periodic_primitive_from_cell_averages(cell_avg: np.ndarray, dx: float, 
     wraps = np.floor(x / l)
     x_mod = x - wraps * l
     return wraps * total + (q_spline(x_mod) + total * (x_mod / l))
+
+
+def eval_periodic_primitive_batch_axis0(cell_avg: np.ndarray, dx: float, x: np.ndarray) -> np.ndarray:
+    n, n_batch = cell_avg.shape
+    length = n * dx
+
+    masses = cell_avg * dx
+    p_edges = np.vstack((np.zeros((1, n_batch), dtype=cell_avg.dtype), np.cumsum(masses, axis=0)))
+
+    total = p_edges[-1, :]
+    x_edges = np.arange(n + 1) * dx
+    q_edges = p_edges - (x_edges[:, None] / length) * total[None, :]
+    q_spline = CubicSpline(x_edges, q_edges, axis=0, bc_type="periodic", extrapolate="periodic")
+
+    wraps = np.floor(x / length)
+    x_mod = x - wraps * length
+    q_val = eval_cubic_components_axis0(q_spline, x_mod)
+    return wraps * total[None, :] + q_val + (x_mod / length) * total[None, :]
 
 
 def eval_bounded_primitive_from_cell_averages(
@@ -118,32 +150,43 @@ def eval_bounded_primitive_from_cell_averages(
     return y
 
 
+def eval_bounded_primitive_batch_rows(
+    cell_avg: np.ndarray, dx: float, xmin: float, xmax: float, x: np.ndarray
+) -> np.ndarray:
+    n_batch, n = cell_avg.shape
+    masses = cell_avg * dx
+    p_edges = np.concatenate(
+        (np.zeros((n_batch, 1), dtype=cell_avg.dtype), np.cumsum(masses, axis=1)),
+        axis=1,
+    )
+
+    total = p_edges[:, -1]
+    x_edges = xmin + np.arange(n + 1) * dx
+    spline = CubicSpline(x_edges, p_edges.T, axis=0, bc_type="natural", extrapolate=False)
+    vals = eval_cubic_components_axis0(spline, np.clip(x.T, xmin, xmax)).T
+    return np.where(x >= xmax, total[:, None], np.where(x > xmin, vals, 0.0))
+
+
 def advance_x_conservative(g: Grid, h: float):
     tau = g.DT * h
-    edges = g.x_edges
-    fnew = np.empty_like(g.f)
-    for j in range(g.Nv):
-        shift = g.v[j] * tau
-        left = edges[:-1] - shift
-        right = edges[1:] - shift
-        g_left = eval_periodic_primitive_from_cell_averages(g.f[:, j], g.dx, left - g.xmin)
-        g_right = eval_periodic_primitive_from_cell_averages(g.f[:, j], g.dx, right - g.xmin)
-        fnew[:, j] = (g_right - g_left) / g.dx
-    g.f = fnew
+    edges_rel = np.arange(g.Nx + 1) * g.dx
+    shift = g.v[None, :] * tau
+    left = edges_rel[:-1, None] - shift
+    right = edges_rel[1:, None] - shift
+    g_left = eval_periodic_primitive_batch_axis0(g.f, g.dx, left)
+    g_right = eval_periodic_primitive_batch_axis0(g.f, g.dx, right)
+    g.f = (g_right - g_left) / g.dx
 
 
 def advance_v_conservative(g: Grid, h: float):
     tau = g.DT * h
-    edges = g.v_edges
-    fnew = np.empty_like(g.f)
-    for i in range(g.Nx):
-        shift = g.force[i] * tau
-        left = edges[:-1] - shift
-        right = edges[1:] - shift
-        g_left = eval_bounded_primitive_from_cell_averages(g.f[i, :], g.dv, g.vmin, g.vmax, left)
-        g_right = eval_bounded_primitive_from_cell_averages(g.f[i, :], g.dv, g.vmin, g.vmax, right)
-        fnew[i, :] = (g_right - g_left) / g.dv
-    g.f = fnew
+    edges = g.vmin + np.arange(g.Nv + 1) * g.dv
+    shift = g.force[:, None] * tau
+    left = edges[:-1][None, :] - shift
+    right = edges[1:][None, :] - shift
+    g_left = eval_bounded_primitive_batch_rows(g.f, g.dv, g.vmin, g.vmax, left)
+    g_right = eval_bounded_primitive_batch_rows(g.f, g.dv, g.vmin, g.vmax, right)
+    g.f = (g_right - g_left) / g.dv
 
 
 def create_obs_group(f, root, name, data_shape, link_from=None):
