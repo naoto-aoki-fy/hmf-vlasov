@@ -20,9 +20,11 @@ class Grid:
 
     def __post_init__(self):
         self.dx = (self.xmax - self.xmin) / self.Nx
-        self.dv = (self.vmax - self.vmin) / (self.Nv - 1)
-        self.x = self.xmin + np.arange(self.Nx) * self.dx
-        self.v = self.vmin + np.arange(self.Nv) * self.dv
+        self.dv = (self.vmax - self.vmin) / self.Nv
+        self.x_edges = self.xmin + np.arange(self.Nx + 1) * self.dx
+        self.v_edges = self.vmin + np.arange(self.Nv + 1) * self.dv
+        self.x = self.x_edges[:-1] + 0.5 * self.dx
+        self.v = self.v_edges[:-1] + 0.5 * self.dv
         self.f = np.zeros((self.Nx, self.Nv))
         self.rho = np.zeros(self.Nx)
         self.phi = np.zeros(self.Nv)
@@ -118,7 +120,7 @@ def eval_bounded_primitive_from_cell_averages(
 
 def advance_x_conservative(g: Grid, h: float):
     tau = g.DT * h
-    edges = g.xmin + np.arange(g.Nx + 1) * g.dx
+    edges = g.x_edges
     fnew = np.empty_like(g.f)
     for j in range(g.Nv):
         shift = g.v[j] * tau
@@ -132,7 +134,7 @@ def advance_x_conservative(g: Grid, h: float):
 
 def advance_v_conservative(g: Grid, h: float):
     tau = g.DT * h
-    edges = g.vmin + np.arange(g.Nv + 1) * g.dv
+    edges = g.v_edges
     fnew = np.empty_like(g.f)
     for i in range(g.Nx):
         shift = g.force[i] * tau
@@ -211,7 +213,7 @@ def run(conf, out_file="hmf.h5"):
         }.items():
             f[f"parameters/{k}"] = v
 
-        obs_scalars = ["mass","energy","en_int","en_kin","momentum","Mx","My","I2","I3"]
+        obs_scalars = ["mass","energy","en_int","en_kin","momentum","Mx","My","I2","I3","f_min","Bp"]
         create_obs_group(f, "observables", "mass", ())
         for n in obs_scalars[1:]: create_obs_group(f, "observables", n, (), link_from="mass")
         create_obs_group(f, "fields", "f", g.f.shape)
@@ -228,7 +230,8 @@ def run(conf, out_file="hmf.h5"):
             momentum = np.sum(g.v[None,:]*g.f)*g.dx*g.dv
             i2 = np.sum(g.f**2)*g.dx*g.dv
             i3 = np.sum(g.f**3)*g.dx*g.dv
-            vals = dict(mass=mass, energy=en_kin+en_int, en_int=en_int, en_kin=en_kin, momentum=momentum, Mx=mx, My=my, I2=i2, I3=i3)
+            bp = g.dx * g.dv * (np.sum(g.f[:, 0]) + np.sum(g.f[:, -1]))
+            vals = dict(mass=mass, energy=en_kin+en_int, en_int=en_int, en_kin=en_kin, momentum=momentum, Mx=mx, My=my, I2=i2, I3=i3, f_min=np.min(g.f), Bp=bp)
             for k,v in vals.items(): append_obs(f,"observables",k,step,real_t,v)
             if write_fields:
                 append_obs(f,"fields","f",step,real_t,g.f)
