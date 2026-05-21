@@ -209,6 +209,11 @@ def append_obs(f, root, name, step, time, value):
     g["value"].resize((n+1, *g["value"].shape[1:])); g["value"][n] = value
 
 
+def to_vmf90_field_layout(f_cell: np.ndarray) -> np.ndarray:
+    """Convert internal (Nx, Nv) cell-centered field to vmf90-style (Nv, Nx+1)."""
+    return np.concatenate((f_cell.T, f_cell.T[:, :1]), axis=1)
+
+
 def run(conf, out_file="hmf.h5"):
     nx, nv = int(conf["Nx"]), int(conf["Nv"])
     vmax = float(conf["vmax"])
@@ -259,7 +264,7 @@ def run(conf, out_file="hmf.h5"):
         obs_scalars = ["mass","energy","en_int","en_kin","momentum","Mx","My","I2","I3","f_min","Bp"]
         create_obs_group(f, "observables", "mass", ())
         for n in obs_scalars[1:]: create_obs_group(f, "observables", n, (), link_from="mass")
-        create_obs_group(f, "fields", "f", g.f.shape)
+        create_obs_group(f, "fields", "f", (g.Nv, g.Nx + 1))
         create_obs_group(f, "fields", "rho", g.rho.shape, link_from="f")
         create_obs_group(f, "fields", "phi", g.phi.shape, link_from="f")
 
@@ -277,7 +282,7 @@ def run(conf, out_file="hmf.h5"):
             vals = dict(mass=mass, energy=en_kin+en_int, en_int=en_int, en_kin=en_kin, momentum=momentum, Mx=mx, My=my, I2=i2, I3=i3, f_min=np.min(g.f), Bp=bp)
             for k,v in vals.items(): append_obs(f,"observables",k,step,real_t,v)
             if write_fields:
-                append_obs(f,"fields","f",step,real_t,g.f)
+                append_obs(f,"fields","f",step,real_t,to_vmf90_field_layout(g.f))
                 append_obs(f,"fields","rho",step,real_t,g.rho)
                 append_obs(f,"fields","phi",step,real_t,g.phi)
             return mx,my

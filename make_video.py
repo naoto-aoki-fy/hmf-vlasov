@@ -11,12 +11,27 @@ def load_fields(h5_path: Path):
     with h5py.File(h5_path, "r") as f:
         f_values = f["fields/f/value"][:]
         times = f["fields/f/time"][:]
+        nx = int(f["parameters/Nx"][()])
+        nv = int(f["parameters/Nv"][()])
         x_min = float(f["parameters/xmin"][()])
         x_max = float(f["parameters/xmax"][()])
         v_min = float(f["parameters/vmin"][()])
         v_max = float(f["parameters/vmax"][()])
 
-    return f_values, times, (x_min, x_max, v_min, v_max)
+    return normalize_field_layout(f_values, nx, nv), times, (x_min, x_max, v_min, v_max)
+
+
+def normalize_field_layout(values: np.ndarray, nx: int, nv: int) -> np.ndarray:
+    if values.ndim != 3:
+        raise ValueError(f"Expected a 3D field array (time, *, *), got shape {values.shape}.")
+    if values.shape[1:] == (nx, nv):
+        return values
+    if values.shape[1:] == (nv, nx + 1):
+        return values[:, :, :-1].transpose(0, 2, 1)
+    raise ValueError(
+        f"Unsupported field layout {values.shape[1:]} for Nx={nx}, Nv={nv}. "
+        "Expected (Nx, Nv) or vmf90-style (Nv, Nx+1)."
+    )
 
 
 def create_video(h5_file: Path, output: Path, fps: int = 20, dpi: int = 120, cmap: str = "viridis"):
