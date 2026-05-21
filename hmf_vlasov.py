@@ -1,6 +1,7 @@
 import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import tomllib
 import numpy as np
 import h5py
 
@@ -8,26 +9,8 @@ PI = np.pi
 
 
 def parse_config(path: str) -> dict:
-    out = {}
-    with open(path) as f:
-        for raw in f:
-            line = raw.split('!')[0].strip()
-            if not line or '=' not in line:
-                continue
-            k, v = [x.strip() for x in line.split('=', 1)]
-            if v.lower() in {'true', '.true.'}:
-                out[k] = True
-            elif v.lower() in {'false', '.false.'}:
-                out[k] = False
-            else:
-                try:
-                    out[k] = int(v)
-                except ValueError:
-                    try:
-                        out[k] = float(v.replace('d', 'e').replace('D', 'e'))
-                    except ValueError:
-                        out[k] = v.strip('"\'')
-    return out
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 @dataclass

@@ -8,6 +8,11 @@ Python implementation of the **HMF Vlasov simulation** from [`pdebuyl/vmf90`](ht
 python hmf_vlasov.py HMF_in --output hmf.h5
 ```
 
+
+## Configuration
+
+`HMF_in` is now parsed as **TOML**. Use quoted strings and standard TOML numbers/booleans.
+
 ## Notes on compatibility
 
 This implementation reproduces the vmf90 HMF splitting loop and writes an H5MD-like structure with:
