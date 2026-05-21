@@ -23,8 +23,11 @@ class Grid:
         self.dv = (self.vmax - self.vmin) / self.Nv
         self.x_edges = self.xmin + np.arange(self.Nx + 1) * self.dx
         self.v_edges = self.vmin + np.arange(self.Nv + 1) * self.dv
-        self.x = self.x_edges[:-1] + 0.5 * self.dx
-        self.v = self.v_edges[:-1] + 0.5 * self.dv
+        # vmf90 uses nodal coordinates x_i = xmin + (i-1)dx and v_m = vmin + (m-1)dv.
+        # Keep x_edges/v_edges for conservative remap utilities, but align the active
+        # advection grid with vmf90 so pointwise comparisons match at x=+dx/2, etc.
+        self.x = self.xmin + np.arange(self.Nx) * self.dx
+        self.v = self.vmin + np.arange(self.Nv) * self.dv
         self.f = np.zeros((self.Nx, self.Nv))
         self.rho = np.zeros(self.Nx)
         self.phi = np.zeros(self.Nv)
@@ -34,7 +37,11 @@ class Grid:
 def init_waterbag(g: Grid, width: float, bag: float):
     mask_x = np.abs(g.x) <= width
     mask_v = np.abs(g.v) <= bag
-    g.f[np.ix_(mask_x, mask_v)] = 1.0 / (4 * width * bag)
+    g.f.fill(0.0)
+    g.f[np.ix_(mask_x, mask_v)] = 1.0
+    norm = g.f.sum() * g.dx * g.dv
+    if norm > 0.0:
+        g.f /= norm
 
 
 def compute_rho(g: Grid):
