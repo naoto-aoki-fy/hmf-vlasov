@@ -13,6 +13,11 @@ python hmf_vlasov.py HMF_in --output hmf.h5
 
 `HMF_in` is now parsed as **TOML**. Use quoted strings and standard TOML numbers/booleans.
 
+Time-stepping scheme is selected with:
+
+- `scheme = "strang_spline"`: original Strang splitting with pointwise cubic-spline interpolation.
+- `scheme = "strang_conservative"`: Strang splitting with conservative semi-Lagrangian finite-volume remap.
+
 ## Notes on compatibility
 
 This implementation reproduces the vmf90 HMF splitting loop and writes an H5MD-like structure with:

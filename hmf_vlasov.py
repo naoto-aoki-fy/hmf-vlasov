@@ -80,6 +80,70 @@ def advance_v(g: Grid, h: float):
     g.f = fnew
 
 
+def eval_periodic_primitive_from_cell_averages(cell_avg: np.ndarray, dx: float, x: np.ndarray) -> np.ndarray:
+    n = cell_avg.size
+    l = n * dx
+    masses = cell_avg * dx
+    p_edges = np.zeros(n + 1)
+    p_edges[1:] = np.cumsum(masses)
+    total = p_edges[-1]
+
+    x_edges = np.arange(n + 1) * dx
+    q_edges = p_edges - total * (x_edges / l)
+    q_spline = CubicSpline(x_edges, q_edges, bc_type="periodic", extrapolate="periodic")
+
+    wraps = np.floor(x / l)
+    x_mod = x - wraps * l
+    return wraps * total + (q_spline(x_mod) + total * (x_mod / l))
+
+
+def eval_bounded_primitive_from_cell_averages(
+    cell_avg: np.ndarray, dx: float, xmin: float, xmax: float, x: np.ndarray
+) -> np.ndarray:
+    n = cell_avg.size
+    masses = cell_avg * dx
+    p_edges = np.zeros(n + 1)
+    p_edges[1:] = np.cumsum(masses)
+    total = p_edges[-1]
+    x_edges = xmin + np.arange(n + 1) * dx
+
+    spline = CubicSpline(x_edges, p_edges, bc_type="natural", extrapolate=False)
+    y = np.zeros_like(x, dtype=float)
+    mask_mid = (x > xmin) & (x < xmax)
+    y[x >= xmax] = total
+    if np.any(mask_mid):
+        y[mask_mid] = spline(x[mask_mid])
+    return y
+
+
+def advance_x_conservative(g: Grid, h: float):
+    tau = g.DT * h
+    edges = g.xmin + np.arange(g.Nx + 1) * g.dx
+    fnew = np.empty_like(g.f)
+    for j in range(g.Nv):
+        shift = g.v[j] * tau
+        left = edges[:-1] - shift
+        right = edges[1:] - shift
+        g_left = eval_periodic_primitive_from_cell_averages(g.f[:, j], g.dx, left - g.xmin)
+        g_right = eval_periodic_primitive_from_cell_averages(g.f[:, j], g.dx, right - g.xmin)
+        fnew[:, j] = (g_right - g_left) / g.dx
+    g.f = fnew
+
+
+def advance_v_conservative(g: Grid, h: float):
+    tau = g.DT * h
+    edges = g.vmin + np.arange(g.Nv + 1) * g.dv
+    fnew = np.empty_like(g.f)
+    for i in range(g.Nx):
+        shift = g.force[i] * tau
+        left = edges[:-1] - shift
+        right = edges[1:] - shift
+        g_left = eval_bounded_primitive_from_cell_averages(g.f[i, :], g.dv, g.vmin, g.vmax, left)
+        g_right = eval_bounded_primitive_from_cell_averages(g.f[i, :], g.dv, g.vmin, g.vmax, right)
+        fnew[i, :] = (g_right - g_left) / g.dv
+    g.f = fnew
+
+
 def create_obs_group(f, root, name, data_shape, link_from=None):
     g = f.require_group(f"{root}/{name}")
     maxshape = (None, *data_shape)
@@ -109,6 +173,16 @@ def run(conf, out_file="hmf.h5"):
 
     n_steps, n_top = int(conf["n_steps"]), int(conf["n_top"])
     n_images = int(conf.get("n_images", n_top))
+    scheme = str(conf.get("scheme", "strang_spline")).lower()
+
+    if scheme == "strang_spline":
+        adv_x = advance_x
+        adv_v = advance_v
+    elif scheme == "strang_conservative":
+        adv_x = advance_x_conservative
+        adv_v = advance_v_conservative
+    else:
+        raise ValueError(f"Unknown scheme={scheme!r}. Use 'strang_spline' or 'strang_conservative'.")
 
     with h5py.File(out_file, "w") as f:
         h5md = f.create_group("h5md")
@@ -121,7 +195,19 @@ def run(conf, out_file="hmf.h5"):
         f.create_group("observables")
         f.create_group("parameters")
 
-        for k, v in {"model":"HMF","Nx":nx,"Nv":nv,"DT":dt,"xmin":g.xmin,"xmax":g.xmax,"vmin":g.vmin,"vmax":g.vmax,"dx":g.dx,"dv":g.dv}.items():
+        for k, v in {
+            "model": "HMF",
+            "Nx": nx,
+            "Nv": nv,
+            "DT": dt,
+            "xmin": g.xmin,
+            "xmax": g.xmax,
+            "vmin": g.vmin,
+            "vmax": g.vmax,
+            "dx": g.dx,
+            "dv": g.dv,
+            "scheme": scheme,
+        }.items():
             f[f"parameters/{k}"] = v
 
         obs_scalars = ["mass","energy","en_int","en_kin","momentum","Mx","My","I2","I3"]
@@ -151,12 +237,12 @@ def run(conf, out_file="hmf.h5"):
 
         mx,my = write(0, write_fields=True)
         for top in range(1, n_top+1):
-            advance_x(g, 0.5)
+            adv_x(g, 0.5)
             for _ in range(n_steps-1):
                 compute_rho(g); mx,my = compute_M(g); compute_force(g,mx,my)
-                advance_v(g,1.0); advance_x(g,1.0); real_t += dt
+                adv_v(g,1.0); adv_x(g,1.0); real_t += dt
             compute_rho(g); mx,my = compute_M(g); compute_force(g,mx,my)
-            advance_v(g,1.0); advance_x(g,0.5); real_t += dt
+            adv_v(g,1.0); adv_x(g,0.5); real_t += dt
             write_fields = top*n_images//n_top >= t_images
             write(top, write_fields=write_fields)
             if write_fields:
