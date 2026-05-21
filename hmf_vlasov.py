@@ -88,18 +88,27 @@ def linear_interp(values, xp):
 
 
 def advance_x(g: Grid, h: float):
-    fnew = np.empty_like(g.f)
-    for m, vm in enumerate(g.v):
-        xp = (np.arange(g.Nx) - (g.DT * h * vm) / g.dx)
-        fnew[:, m] = periodic_interp(g.f[:, m], xp)
+    x_idx = np.arange(g.Nx)[:, None]
+    v_shift = (g.DT * h * g.v)[None, :] / g.dx
+    xp = (x_idx - v_shift) % g.Nx
+    i0 = np.floor(xp).astype(int)
+    i1 = (i0 + 1) % g.Nx
+    t = xp - i0
+    fnew = (1.0 - t) * np.take_along_axis(g.f, i0, axis=0) + t * np.take_along_axis(g.f, i1, axis=0)
     g.f = fnew
 
 
 def advance_v(g: Grid, h: float):
-    fnew = np.empty_like(g.f)
-    for i, fi in enumerate(g.force):
-        vp = np.arange(g.Nv) - (g.DT * h * fi) / g.dv
-        fnew[i, :] = linear_interp(g.f[i, :], vp)
+    v_idx = np.arange(g.Nv)[None, :]
+    f_shift = (g.DT * h * g.force)[:, None] / g.dv
+    vp = v_idx - f_shift
+    i0 = np.floor(vp).astype(int)
+    t = vp - i0
+    valid = (i0 >= 0) & (i0 + 1 < g.Nv)
+    i0_clip = np.clip(i0, 0, g.Nv - 2)
+    left = np.take_along_axis(g.f, i0_clip, axis=1)
+    right = np.take_along_axis(g.f, i0_clip + 1, axis=1)
+    fnew = np.where(valid, (1.0 - t) * left + t * right, 0.0)
     g.f = fnew
 
 
