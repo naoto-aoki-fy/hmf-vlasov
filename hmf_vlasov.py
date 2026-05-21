@@ -20,7 +20,10 @@ class Grid:
 
     def __post_init__(self):
         self.dx = (self.xmax - self.xmin) / self.Nx
-        self.dv = (self.vmax - self.vmin) / self.Nv
+        # vmf90's velocity grid is nodal and includes both endpoints, so dv uses (Nv-1).
+        # Using /Nv shifts all velocity sample points and causes IC mismatches near v≈0
+        # (e.g., around v=-Δv/2 in waterbag comparisons).
+        self.dv = (self.vmax - self.vmin) / (self.Nv - 1)
         self.x_edges = self.xmin + np.arange(self.Nx + 1) * self.dx
         self.v_edges = self.vmin + np.arange(self.Nv + 1) * self.dv
         # vmf90 uses nodal coordinates x_i = xmin + (i-1)dx and v_m = vmin + (m-1)dv.
