@@ -58,9 +58,12 @@ def advance_x(g: Grid, h: float):
     period = g.xmax - g.xmin
     x_eval = ((x_back - g.xmin) % period) + g.xmin
 
+    x_periodic = np.concatenate((g.x, [g.xmax]))
+
     fnew = np.empty_like(g.f)
     for j in range(g.Nv):
-        spline = CubicSpline(g.x, g.f[:, j], bc_type="periodic", extrapolate="periodic")
+        y_periodic = np.concatenate((g.f[:, j], [g.f[0, j]]))
+        spline = CubicSpline(x_periodic, y_periodic, bc_type="periodic", extrapolate="periodic")
         fnew[:, j] = spline(x_eval[:, j])
     g.f = fnew
 
