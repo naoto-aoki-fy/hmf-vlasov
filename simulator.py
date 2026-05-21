@@ -31,7 +31,7 @@ class Grid:
 
     @property
     def theta_centers(self) -> np.ndarray:
-        return (np.arange(self.ntheta) + 0.5) * self.dtheta
+        return -np.pi + (np.arange(self.ntheta) + 0.5) * self.dtheta
 
     @property
     def p_centers(self) -> np.ndarray:
@@ -219,7 +219,7 @@ def main() -> None:
             f.T,
             origin="lower",
             aspect="auto",
-            extent=(0.0, 2.0 * np.pi, -grid.pmax, grid.pmax),
+            extent=(-np.pi, np.pi, -grid.pmax, grid.pmax),
             cmap="viridis",
         )
         ax.set_xlabel("theta")

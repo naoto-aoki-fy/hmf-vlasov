@@ -11,7 +11,7 @@ import numpy as np
 
 def theta_centers(ntheta: int) -> np.ndarray:
     dtheta = 2.0 * np.pi / ntheta
-    return (np.arange(ntheta) + 0.5) * dtheta
+    return -np.pi + (np.arange(ntheta) + 0.5) * dtheta
 
 
 def p_centers(np_: int, pmax: float) -> np.ndarray:
@@ -32,8 +32,7 @@ def generate_wbic(ntheta: int, np_: int, pmax: float, delta_theta: float, delta_
     th = theta_centers(ntheta)
     pp = p_centers(np_, pmax)
 
-    th_wrapped = (th + np.pi) % (2.0 * np.pi) - np.pi
-    theta_mask = np.abs(th_wrapped) <= (0.5 * delta_theta)
+    theta_mask = np.abs(th) <= (0.5 * delta_theta)
     p_mask = np.abs(pp) <= (0.5 * delta_p)
 
     f = np.zeros((ntheta, np_), dtype=float)

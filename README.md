@@ -19,7 +19,7 @@ python generate_wbic_init.py \
 The generated distribution is uniform inside:
 
 - `p in [-delta-p/2, +delta-p/2]`
-- `theta in [-delta-theta/2, +delta-theta/2]` (wrapped onto `[0, 2pi)`)
+- `theta in [-delta-theta/2, +delta-theta/2]` (on the simulation domain `[-pi, pi)`)
 
 ## Run
 
