@@ -173,6 +173,7 @@ def run(conf, out_file="hmf.h5"):
 
     n_steps, n_top = int(conf["n_steps"]), int(conf["n_top"])
     n_images = int(conf.get("n_images", n_top))
+    log_every = max(1, int(conf.get("log_every", 1)))
     scheme = str(conf.get("scheme", "strang_spline")).lower()
 
     if scheme == "strang_spline":
@@ -236,6 +237,11 @@ def run(conf, out_file="hmf.h5"):
             return mx,my
 
         mx,my = write(0, write_fields=True)
+        print(
+            f"[progress] top=0/{n_top} time={real_t:.6f} "
+            f"M=({mx:.6e}, {my:.6e}) |M|={np.hypot(mx, my):.6e}",
+            flush=True,
+        )
         for top in range(1, n_top+1):
             adv_x(g, 0.5)
             for _ in range(n_steps-1):
@@ -244,7 +250,14 @@ def run(conf, out_file="hmf.h5"):
             compute_rho(g); mx,my = compute_M(g); compute_force(g,mx,my)
             adv_v(g,1.0); adv_x(g,0.5); real_t += dt
             write_fields = top*n_images//n_top >= t_images
-            write(top, write_fields=write_fields)
+            mx, my = write(top, write_fields=write_fields)
+            if (top % log_every) == 0 or top == n_top:
+                print(
+                    f"[progress] top={top}/{n_top} time={real_t:.6f} "
+                    f"M=({mx:.6e}, {my:.6e}) |M|={np.hypot(mx, my):.6e} "
+                    f"fields_written={write_fields}",
+                    flush=True,
+                )
             if write_fields:
                 t_images += 1
 
