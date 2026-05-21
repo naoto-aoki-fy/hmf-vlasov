@@ -42,3 +42,16 @@ Or create a GIF:
 ```bash
 python make_video.py hmf.h5 --output distribution.gif
 ```
+
+
+Create a video (MP4) of the time evolution of the **difference** between two distributions:
+
+```bash
+python make_difference_video.py run_a.h5 run_b.h5 --output difference.mp4
+```
+
+Or create a GIF:
+
+```bash
+python make_difference_video.py run_a.h5 run_b.h5 --output difference.gif
+```
