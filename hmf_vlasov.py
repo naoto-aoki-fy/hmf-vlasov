@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import tomllib
 import numpy as np
 import h5py
+from scipy.interpolate import CubicSpline
 
 PI = np.pi
 
@@ -29,7 +30,7 @@ class Grid:
 
 
 def init_waterbag(g: Grid, width: float, bag: float):
-    mask_x = np.abs(((g.x + PI) % (2*PI)) - PI) <= width
+    mask_x = np.abs(g.x) <= width
     mask_v = np.abs(g.v) <= bag
     g.f[np.ix_(mask_x, mask_v)] = 1.0 / (4 * width * bag)
 
@@ -52,46 +53,27 @@ def compute_force(g: Grid, mx: float, my: float):
     g.force = np.cos(g.x) * my - np.sin(g.x) * mx
 
 
-def periodic_interp(values, xp):
-    n = values.size
-    xp = xp % n
-    i0 = np.floor(xp).astype(int)
-    i1 = (i0 + 1) % n
-    t = xp - i0
-    return (1 - t) * values[i0] + t * values[i1]
-
-
-def linear_interp(values, xp):
-    i0 = np.floor(xp).astype(int)
-    t = xp - i0
-    valid = (i0 >= 0) & (i0 + 1 < values.size)
-    out = np.zeros_like(xp, dtype=float)
-    out[valid] = (1 - t[valid]) * values[i0[valid]] + t[valid] * values[i0[valid] + 1]
-    return out
-
-
 def advance_x(g: Grid, h: float):
-    x_idx = np.arange(g.Nx)[:, None]
-    v_shift = (g.DT * h * g.v)[None, :] / g.dx
-    xp = (x_idx - v_shift) % g.Nx
-    i0 = np.floor(xp).astype(int)
-    i1 = (i0 + 1) % g.Nx
-    t = xp - i0
-    fnew = (1.0 - t) * np.take_along_axis(g.f, i0, axis=0) + t * np.take_along_axis(g.f, i1, axis=0)
+    x_back = g.x[:, None] - g.DT * h * g.v[None, :]
+    period = g.xmax - g.xmin
+    x_eval = ((x_back - g.xmin) % period) + g.xmin
+
+    fnew = np.empty_like(g.f)
+    for j in range(g.Nv):
+        spline = CubicSpline(g.x, g.f[:, j], bc_type="periodic", extrapolate="periodic")
+        fnew[:, j] = spline(x_eval[:, j])
     g.f = fnew
 
 
 def advance_v(g: Grid, h: float):
-    v_idx = np.arange(g.Nv)[None, :]
-    f_shift = (g.DT * h * g.force)[:, None] / g.dv
-    vp = v_idx - f_shift
-    i0 = np.floor(vp).astype(int)
-    t = vp - i0
-    valid = (i0 >= 0) & (i0 + 1 < g.Nv)
-    i0_clip = np.clip(i0, 0, g.Nv - 2)
-    left = np.take_along_axis(g.f, i0_clip, axis=1)
-    right = np.take_along_axis(g.f, i0_clip + 1, axis=1)
-    fnew = np.where(valid, (1.0 - t) * left + t * right, 0.0)
+    v_back = g.v[None, :] - g.DT * h * g.force[:, None]
+
+    fnew = np.zeros_like(g.f)
+    for i in range(g.Nx):
+        spline = CubicSpline(g.v, g.f[i, :], bc_type="natural", extrapolate=False)
+        vals = spline(v_back[i, :])
+        vals[np.isnan(vals)] = 0.0
+        fnew[i, :] = vals
     g.f = fnew
 
 
@@ -119,7 +101,7 @@ def run(conf, out_file="hmf.h5"):
     nx, nv = int(conf["Nx"]), int(conf["Nv"])
     vmax = float(conf["vmax"])
     dt = float(conf["DT"])
-    g = Grid(nx, nv, 0.0, PI, -vmax, vmax, dt)
+    g = Grid(nx, nv, -PI, PI, -vmax, vmax, dt)
     init_waterbag(g, float(conf["width"]), float(conf["bag"]))
 
     n_steps, n_top = int(conf["n_steps"]), int(conf["n_top"])
@@ -147,7 +129,7 @@ def run(conf, out_file="hmf.h5"):
         create_obs_group(f, "fields", "phi", g.phi.shape, link_from="f")
 
         real_t = 0.0; t_images = 1
-        def write(step):
+        def write(step, write_fields=True):
             compute_rho(g); compute_phi(g)
             mx, my = compute_M(g)
             en_kin = 0.5*np.sum((g.v[None,:]**2)*g.f)*g.dx*g.dv
@@ -158,12 +140,13 @@ def run(conf, out_file="hmf.h5"):
             i3 = np.sum(g.f**3)*g.dx*g.dv
             vals = dict(mass=mass, energy=en_kin+en_int, en_int=en_int, en_kin=en_kin, momentum=momentum, Mx=mx, My=my, I2=i2, I3=i3)
             for k,v in vals.items(): append_obs(f,"observables",k,step,real_t,v)
-            append_obs(f,"fields","f",step,real_t,g.f)
-            append_obs(f,"fields","rho",step,real_t,g.rho)
-            append_obs(f,"fields","phi",step,real_t,g.phi)
+            if write_fields:
+                append_obs(f,"fields","f",step,real_t,g.f)
+                append_obs(f,"fields","rho",step,real_t,g.rho)
+                append_obs(f,"fields","phi",step,real_t,g.phi)
             return mx,my
 
-        mx,my = write(0)
+        mx,my = write(0, write_fields=True)
         for top in range(1, n_top+1):
             advance_x(g, 0.5)
             for _ in range(n_steps-1):
@@ -171,10 +154,10 @@ def run(conf, out_file="hmf.h5"):
                 advance_v(g,1.0); advance_x(g,1.0); real_t += dt
             compute_rho(g); mx,my = compute_M(g); compute_force(g,mx,my)
             advance_v(g,1.0); advance_x(g,0.5); real_t += dt
-            if top*n_images//n_top >= t_images:
-                write(top); t_images += 1
-            else:
-                write(top)
+            write_fields = top*n_images//n_top >= t_images
+            write(top, write_fields=write_fields)
+            if write_fields:
+                t_images += 1
 
 
 if __name__ == "__main__":
