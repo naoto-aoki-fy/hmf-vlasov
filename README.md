@@ -29,12 +29,12 @@ State dumps are little-endian binary files with this layout:
 python simulator.py \
   --input initial.bin \
   --output final.bin \
-  --dt 0.05 \
-  --steps 100 \
-  --diag-every 10 \
+  --dt 0.1 \
+  --steps 1000 \
+  --diag-every 5 \
   --video distribution.mp4 \
-  --video-every 2 \
-  --video-fps 24
+  --video-every 5 \
+  --video-fps 30
 ```
 
 ## Quick utility snippet to create an initial dump
@@ -66,11 +66,11 @@ Use `generate_wbic.py` to create a waterbag initial condition (uniform inside a 
 ```bash
 python generate_wbic.py \
   --output initial.bin \
-  --n-theta 128 \
-  --n-p 128 \
-  --p-max 4.0 \
-  --delta-p 1.0 \
-  --delta-theta 0.5
+  --n-theta 256 \
+  --n-p 512 \
+  --p-max 2.5 \
+  --delta-p 1.3747727084867518 \
+  --delta-theta 1.8954942670339805
 ```
 
 WBIC support ranges:
