@@ -56,7 +56,7 @@ dump_state(Path("initial.bin"), grid, t=0.0, f=f0)
 
 
 
-If `--video` is set, the simulator records the evolving distribution and writes an animation. The horizontal axis is `theta` and the vertical axis is `p`. Use `.mp4` (ffmpeg writer) or `.gif` (pillow writer) as the output extension.
+If `--video` is set, the simulator records the evolving distribution and writes an animation. The horizontal axis is `theta` (range `[-pi, pi]`) and the vertical axis is `p`. Use `.mp4` (ffmpeg writer) or `.gif` (pillow writer) as the output extension.
 
 
 ## Generate WBIC initial condition
@@ -75,6 +75,6 @@ python generate_wbic.py \
 
 WBIC support ranges:
 - `p in [-delta_p/2, +delta_p/2]`
-- `theta in [-delta_theta/2, +delta_theta/2]` (with periodic wrap to `[0, 2pi)`)
+- `theta in [-delta_theta/2, +delta_theta/2]` (with periodic wrap to `[-pi, pi)`)
 
 The generated distribution is normalized to unit total mass.

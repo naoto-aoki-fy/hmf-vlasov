@@ -39,7 +39,7 @@ class Grid:
 
     @property
     def theta_centers(self) -> np.ndarray:
-        return (np.arange(self.n_theta, dtype=np.float64) + 0.5) * self.dtheta
+        return -np.pi + (np.arange(self.n_theta, dtype=np.float64) + 0.5) * self.dtheta
 
     @property
     def p_centers(self) -> np.ndarray:
@@ -197,7 +197,7 @@ def render_video(path: Path, grid: Grid, frames: List[np.ndarray], times: List[f
         raise RuntimeError("Video output requires matplotlib") from exc
 
     fig, ax = plt.subplots(figsize=(7, 4))
-    extent = (0.0, 2.0 * np.pi, -grid.p_max, grid.p_max)
+    extent = (-np.pi, np.pi, -grid.p_max, grid.p_max)
     img = ax.imshow(
         frames[0].T,
         origin="lower",
