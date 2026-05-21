@@ -10,10 +10,10 @@ Use `generate_wbic_init.py` to create a water-bag initial condition file for `si
 python generate_wbic_init.py \
   --output init.npy \
   --ntheta 256 \
-  --np 256 \
-  --pmax 8.0 \
-  --delta-p 1.0 \
-  --delta-theta 1.0
+  --np 512 \
+  --pmax 2.5 \
+  --delta-p 1.3747727084867518 \
+  --delta-theta 1.8954942670339805
 ```
 
 The generated distribution is uniform inside:
@@ -28,11 +28,12 @@ python simulator.py \
   --init init.npy \
   --output final_state.npz \
   --ntheta 256 \
-  --np 256 \
-  --pmax 8.0 \
-  --dt 0.05 \
-  --tfinal 10.0 \
-  --video evolution.mp4
+  --np 512 \
+  --pmax 2.5 \
+  --dt 0.1 \
+  --tfinal 200.0 \
+  --video evolution.mp4 \
+  --video-step 5
 ```
 
 - `init.npy` must contain a 2D NumPy array of shape `(ntheta, np)` with arbitrary initial data sampled as cell averages.
